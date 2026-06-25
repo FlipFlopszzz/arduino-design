@@ -72,9 +72,10 @@ private:
 
   // 竞选阶段
   bool claiming;
+  bool canClaim;          // 允许参加竞选（loser 后关闭，只加入已有网络）
   unsigned long claimEndTime;
-  unsigned long myClaim;        // 我的竞选值
-  unsigned long bestClaim;      // 听到的最大竞选值
+  unsigned long myClaim;
+  unsigned long bestClaim;
   bool claimBroadcastSent;
 
   // 测试模式
@@ -245,7 +246,7 @@ public:
 
   PeerNode() : state(STATE_SCANNING), myAddr(ADDR_NONE), isInitiator(false),
                lastHeartbeat(0), rapidBeaconCount(0), joinRetries(0),
-               joinTarget(ADDR_NONE), joinTimer(0), leaveTimer(0), joinToken(0) {
+               joinTarget(ADDR_NONE), joinTimer(0), leaveTimer(0), joinToken(0), canClaim(true) {
     resetRoute();
     resetStats();
   }
@@ -324,8 +325,13 @@ public:
 
   void checkScanTimeout() {
     if (millis() < scanEndTime) return;
-    // 扫描结束，没听到网络 → 进入竞选
-    startClaiming();
+    if (canClaim) {
+      startClaiming();
+    } else {
+      // loser：保持监听，只加入已有网络，不参选
+      scanEndTime = millis() + SCAN_LISTEN_TIME;
+      Serial.println(F("[S] Wait"));
+    }
   }
 
   // ==================== 竞选（多个新节点同时存在时比随机数大小） ====================
@@ -393,7 +399,7 @@ public:
       Serial.print(F("[C] Lost to "));
       Serial.print(bestClaim);
       Serial.println(F(", waiting"));
-      // 听一轮完整的扫描窗口确保能收到 winner 的心跳
+      canClaim = false;  // 不再参与竞选，只加入已有网络
       startScan();
       return;
     }
@@ -451,6 +457,7 @@ public:
     if (joinRetries >= RETRY_MAX) {
       Serial.print(F("[NET] Join fail to "));
       Serial.println((char)joinTarget);
+      canClaim = true;
       startScan();
       return;
     }
@@ -466,6 +473,7 @@ public:
       Serial.println((char)myAddr);
       resetRoute();
       myAddr = ADDR_NONE;
+      canClaim = true;  // 冲突重置，允许重新竞选
       startScan();
       return;
     }
@@ -713,14 +721,11 @@ public:
     printNodeBanner();
     Serial.println(F("--- ROUTE ---"));
     for (int i = 0; i < MAX_NODES; i++) {
+      if (i == addrIdx(myAddr)) { Serial.print(F("  ")); Serial.print((char)myAddr); Serial.println(F(": SELF")); continue; }
+      if (!route[i].online) continue;
       Serial.print(F("  "));
       Serial.print((char)idxAddr(i));
-      Serial.print(F(": "));
-      if (i == addrIdx(myAddr)) { Serial.println(F("SELF")); continue; }
-      if (!route[i].online) { Serial.println(F("--")); continue; }
-      Serial.print(F("ON "));
-      Serial.print((millis() - route[i].lastSeen) / 1000);
-      Serial.println(F("s"));
+      Serial.println(F(": ON"));
     }
 
     // 网络质量
