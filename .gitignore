@@ -1,0 +1,9 @@
+*
+!.gitignore
+!proj/
+proj/*
+!proj/main/
+proj/main/*
+!proj/main/config.h
+!proj/main/main.ino
+!proj/main/Node.h
