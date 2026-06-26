@@ -25,11 +25,11 @@
 #define F_CLAIM 'C'          // 竞选声明：多个候选节点同时存在时，比随机数大小决定谁入网
 
 // 时序 (ms)
-#define SCAN_LISTEN_TIME 3000 // 监听时长：只收不发，听不到网络活动才进入竞选
-#define SCAN_JITTER_MAX 2000  // 监听额外随机等待（0~2s），各板完成时间不同
-#define CLAIM_WINDOW 1000     // 竞选窗口：发声明 + 收别人的声明，比随机数大小
-#define HEARTBEAT_INTERVAL 1500
-#define NEIGHBOR_TIMEOUT 6000
+#define SCAN_LISTEN_TIME 5000 // 监听时长
+#define SCAN_JITTER_MAX 4000  // 监听额外随机等待
+#define CLAIM_WINDOW 2000     // 竞选窗口
+#define HEARTBEAT_INTERVAL 2000
+#define NEIGHBOR_TIMEOUT 8000
 #define ACK_TIMEOUT 500      // 等待 ACK 超时（单播）
 #define RETRY_MAX 3          // 入网重试次数
 #define LEAVE_TIMEOUT 500
