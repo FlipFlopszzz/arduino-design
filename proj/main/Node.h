@@ -517,14 +517,9 @@ public:
     ack.DataLen = '2';                          // 令牌 + 地址
     ack.MsgData = String((char)token) + String((char)na);
     sendMsg(ack);
-    markOnline(na);
-    // 分配后立即发心跳，让网络其他节点尽快学习到新节点
-    Message hb;
-    hb.DAddr = ADDR_BCAST; hb.SAddr = myAddr;
-    hb.Function = F_HEARTBEAT;
-    String rt = encodeRoute();
-    hb.DataLen = (byte)(rt.length() + '0'); hb.MsgData = rt;
-    sendMsg(hb);
+    // 不在此标记地址在线，不移除地址可用性
+    // 新节点收到 ACK 入网后会发心跳自行宣告存在
+    // 若 ACK 丢失，新节点重试时该地址仍可分配
   }
 
   void handleLeaveReq(Message& msg) {
