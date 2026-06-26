@@ -214,15 +214,16 @@ private:
       if (data.charAt(i) == '1') {
         byte reportedAddr = idxAddr(i);
         if (reportedAddr != myAddr && reportedAddr != sender) {
-          // 间接学习：其他节点说 reportedAddr 在线，刷新 lastSeen 防止超时误判
-          // 即使节点自身的直连心跳不稳定，只要网络中有人能联系到它，就不该判离线
+          // 间接学习：只知道这个节点曾经在线，但不确定它现在还活着
+          // 只对新出现的节点标记在线，但不刷新 lastSeen
+          // 只有直接心跳（markOnline）才能刷新 lastSeen
           if (!route[i].online) {
+            route[i].online = true;
+            route[i].lastSeen = millis();
             Serial.print(F("[NET] Learn "));
             Serial.print((char)reportedAddr);
             Serial.println(F(" via hb"));
           }
-          route[i].online = true;
-          route[i].lastSeen = millis();
         }
       }
     }
