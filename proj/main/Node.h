@@ -765,8 +765,23 @@ public:
     m.DAddr = t; m.SAddr = myAddr; m.Function = F_DATA;
     m.DataLen = (byte)(d.length() + '0'); m.MsgData = d;
     sendMsg(m);
+
+    // 等 ACK，500ms 超时
+    unsigned long deadline = millis() + ACK_TIMEOUT;
+    bool acked = false;
+    while (millis() < deadline) {
+      Message r;
+      if (recvMsg(r)) {
+        if (r.Function == F_DATA_ACK && r.SAddr == t) {
+          acked = true;
+          break;
+        }
+      }
+    }
+
     Serial.print(F("[TX] >")); Serial.print((char)t);
-    Serial.print(F(": ")); Serial.println(d);
+    Serial.print(F(": ")); Serial.print(d);
+    Serial.println(acked ? F(" (ACK)") : F(" (NOT ACKED)"));
   }
 
   void sendBroadcast(String d) {

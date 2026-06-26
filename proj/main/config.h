@@ -25,16 +25,16 @@
 #define F_CLAIM 'C'          // 竞选声明：多个候选节点同时存在时，比随机数大小决定谁入网
 
 // 时序 (ms)
-#define SCAN_LISTEN_TIME 6000 // 监听时长：只收不发，听不到网络活动才进入竞选
-#define SCAN_JITTER_MAX 4000  // 监听额外随机等待（0~4s），各板完成时间不同
-#define CLAIM_WINDOW 1500     // 竞选窗口：发声明 + 收别人的声明，比随机数大小
-#define HEARTBEAT_INTERVAL 3000
-#define NEIGHBOR_TIMEOUT 12000
-#define ACK_TIMEOUT 800      // 等待 ACK 超时
+#define SCAN_LISTEN_TIME 3000 // 监听时长：只收不发，听不到网络活动才进入竞选
+#define SCAN_JITTER_MAX 2000  // 监听额外随机等待（0~2s），各板完成时间不同
+#define CLAIM_WINDOW 1000     // 竞选窗口：发声明 + 收别人的声明，比随机数大小
+#define HEARTBEAT_INTERVAL 1500
+#define NEIGHBOR_TIMEOUT 6000
+#define ACK_TIMEOUT 500      // 等待 ACK 超时（单播）
 #define RETRY_MAX 3          // 入网重试次数
-#define LEAVE_TIMEOUT 800
-#define RAPID_BEACONS 10     // 首个节点快速心跳次数
-#define RAPID_BEACON_INTERVAL 100  // 100ms 间隔，1秒内发完
+#define LEAVE_TIMEOUT 500
+#define RAPID_BEACONS 5     // 快速宣告次数
+#define RAPID_BEACON_INTERVAL 100
 
 // 串口命令
 #define CMD_STATUS 'S'
