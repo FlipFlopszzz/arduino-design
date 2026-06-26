@@ -339,8 +339,8 @@ void loop() {
 | arduino-cli | `E:\Arduino CLI\arduino-cli.exe`，已加入环境变量 |
 | LoRa库 | 已解压于 `说明文档/通信系统综合设计与实践资料下发/1.LoRa资料/LoRa库文件/arduino-LoRa-master/`，复制到 Arduino libraries 即可使用 |
 | 串口调试 | `说明文档/串口猎人(Serial Hunter) V31 setup.exe` — 第三方串口调试助手，支持多串口监控、HEX/ASCII显示、波形查看等功能，比 arduino-cli monitor 功能更强 |
-| 板子（大板） | PlayKit，ATmega328P，UNO模式，port COM5 |
-| 板子（小板） | Arduino UNO R3，ATmega328P，port COM6 |
+| 板子（大板） | PlayKit，ATmega328P，UNO模式，port COM12 |
+| 板子（小板） | Arduino UNO R3，ATmega328P，port COM6/COM7/COM9 |
 | 虚拟串口 | 已改到 COM20↔COM21，释放 COM6/COM7 |
 
 ### arduino-cli 常用命令
