@@ -505,7 +505,7 @@ public:
   }
 
   void handleJoinReq(Message& msg) {
-    if (countOnline() >= MAX_NODES - 1) return;
+    if (countOnline() >= MAX_NODES) return;
     byte na = pickUnusedAddr();
     if (na == ADDR_NONE) return;
     byte token = (byte)msg.MsgData.charAt(0);  // 回声请求中的令牌
