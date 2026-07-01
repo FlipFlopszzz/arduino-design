@@ -466,10 +466,10 @@ public:
     if (msg.SAddr >= ADDR_FIRST && msg.SAddr <= ADDR_LAST && msg.SAddr != myAddr)
       markOnline(msg.SAddr);
 
-    // 心跳携带路由表 -> 间接学习
+    // 心跳携带路由表 -> 间接学习（暂注释，直接听心跳即可知在线）
     if (msg.Function == F_HEARTBEAT) {
       heartbeatsReceived++;
-      decodeRoute(msg.SAddr, msg.MsgData);
+      // decodeRoute(msg.SAddr, msg.MsgData);
     }
 
     if (msg.Function == F_DATA || msg.Function == F_BCAST)
@@ -556,7 +556,9 @@ public:
   // ----- 心跳 -----
   void doHeartbeat() {
     unsigned long iv = (rapidBeaconCount > 0) ? 200UL : HEARTBEAT_INTERVAL;
-    if (millis() - lastHeartbeat < iv) return;
+    // 慢速心跳加入 0~500ms 随机 jitter，防止多节点同频碰撞
+    unsigned long jitter = (rapidBeaconCount > 0) ? 0 : (unsigned long)random(0, 500);
+    if (millis() - lastHeartbeat < iv + jitter) return;
     lastHeartbeat = millis();
 
     Message hb;
