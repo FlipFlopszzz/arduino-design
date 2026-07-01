@@ -155,27 +155,34 @@ class MonitorWindow(QtWidgets.QMainWindow):
         layout.addLayout(panelsRow, stretch=1)
 
         # 状态缓存
-        self._nodeAddrs = {}
+        self._nodeAddrs = {}         # panel_name -> node_addr
+        self._onlineNodes = set()    # all online node addresses
         self._statsMap = {}
 
     def _onPanelLog(self, name, text):
-        # 解析节点地址：*** NODE X ***
+        s = text.strip()
+
+        # 解析当前面板的节点地址并更新标题
         m = text.find("*** NODE")
         if m >= 0:
             rest = text[m+9:]
             for c in rest:
                 if c.isdigit():
                     self._nodeAddrs[name] = c
-                    # 更新面板标题
                     for p in self._panels:
                         if p.title().startswith(name):
                             p.setTitle(f"{name} - Node {c}")
                             break
-                    self._updateRoute()
                     break
 
-        # 解析统计数据：去掉行头的 [节点X] 前缀
-        s = text.strip()
+        # 从路由表（X: ON 行）提取所有在线节点
+        if ": ON" in s or ": SELF" in s:
+            addr = s[0]
+            if addr.isdigit():
+                self._onlineNodes.add(addr)
+                self._updateRoute()
+
+        # 统计：去掉行头的 [节点X] 前缀
         if s.startswith("[") and "]" in s:
             s = s.split("]", 1)[1].strip()
         for kw in ["TX packets", "RX packets", "HB sent", "HB recv",
@@ -189,8 +196,14 @@ class MonitorWindow(QtWidgets.QMainWindow):
     def _updateRoute(self):
         self._routeText.clear()
         lines = []
-        for name, addr in self._nodeAddrs.items():
+        # 先显示已映射到面板的节点
+        for name, addr in sorted(self._nodeAddrs.items()):
             lines.append(f"{name}: Node {addr}")
+        # 再显示未映射的在线节点
+        mapped = set(self._nodeAddrs.values())
+        for addr in sorted(self._onlineNodes):
+            if addr not in mapped:
+                lines.append(f"Node {addr}: ON")
         if lines:
             self._routeText.append("\n".join(lines))
 
