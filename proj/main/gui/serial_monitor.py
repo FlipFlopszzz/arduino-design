@@ -21,11 +21,12 @@ class SerialPanel(QtWidgets.QGroupBox):
         layout.setSpacing(2)
         layout.setContentsMargins(4, 4, 4, 4)
 
-        # 第一行：COM + 连接
+        # 第一行：COM口 + 连接按钮
         row1 = QtWidgets.QHBoxLayout()
         row1.setSpacing(4)
         self._portCb = QtWidgets.QComboBox()
         self._portCb.setEditable(True)
+        # 扫描真实串口
         for info in QtSerialPort.QSerialPortInfo.availablePorts():
             self._portCb.addItem(info.portName())
         self._connBtn = QtWidgets.QPushButton("连接")
@@ -34,7 +35,7 @@ class SerialPanel(QtWidgets.QGroupBox):
         row1.addWidget(self._connBtn)
         layout.addLayout(row1)
 
-        # 第二行：命令 + 发送
+        # 第二行：命令输入 + 发送按钮
         row2 = QtWidgets.QHBoxLayout()
         row2.setSpacing(4)
         self._cmdE = QtWidgets.QLineEdit()
@@ -46,7 +47,7 @@ class SerialPanel(QtWidgets.QGroupBox):
         row2.addWidget(self._sendBtn)
         layout.addLayout(row2)
 
-        # 输出框（填满剩余空间）
+        # 第三行：日志输出框（填满剩余空间）
         self._logT = QtWidgets.QTextEdit()
         self._logT.setReadOnly(True)
         layout.addWidget(self._logT, stretch=1)
@@ -61,25 +62,29 @@ class SerialPanel(QtWidgets.QGroupBox):
             self._serial.setStopBits(QtSerialPort.QSerialPort.StopBits.OneStop)
             self._serial.setFlowControl(QtSerialPort.QSerialPort.FlowControl.NoFlowControl)
             if self._serial.open(QtCore.QIODevice.OpenModeFlag.ReadWrite):
+                # 禁用 DTR 防止 Arduino 复位
                 self._serial.setDataTerminalReady(False)
                 QtCore.QThread.msleep(300)
                 self._serial.clear()
                 self._buf = b""
                 self._connected = True
                 self._connBtn.setText("断开")
+                self._log("[SYS] 串口已连接")
             else:
-                self._log(f"[ERR] {self._serial.errorString()}")
+                self._log(f"[ERR] 连接失败: {self._serial.errorString()}")
         else:
             self._serial.close()
             self._connected = False
             self._connBtn.setText("连接")
             self.setTitle(self._name)
+            self._log("[SYS] 串口已断开")
 
     def _sendCmd(self):
         cmd = self._cmdE.text().strip()
         if cmd and self._serial.isOpen():
+            self._log(f"[CMD] {cmd}")
             self._serial.write((cmd + "\n").encode())
-            self._serial.waitForBytesWritten(300)
+            self._serial.waitForBytesWritten(500)
             self._cmdE.clear()
 
     def _onRead(self):
@@ -94,12 +99,14 @@ class SerialPanel(QtWidgets.QGroupBox):
                 text = line.decode("utf-8", errors="replace")
             except:
                 continue
+            # 显示到本面板日志
             self._log(text)
+            # 发送给主窗口解析
             self.logSignal.emit(self._name, text)
 
     def _onErr(self, err):
         if err == QtSerialPort.QSerialPort.SerialPortError.ResourceError and self._connected:
-            self._log("[SYS] 端口断开")
+            self._log("[SYS] 串口断开")
 
     def _log(self, msg):
         self._logT.append(msg)
@@ -123,7 +130,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout(central)
         layout.setSpacing(4)
 
-        # 路由 + 统计
+        # 上方：路由表 + 网络统计（并排）
         infoRow = QtWidgets.QHBoxLayout()
         self._routeText = QtWidgets.QTextEdit()
         self._routeText.setReadOnly(True)
@@ -137,7 +144,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
         infoRow.addWidget(self._statsText)
         layout.addLayout(infoRow)
 
-        # 四个面板
+        # 中间：四个节点面板
         panelsRow = QtWidgets.QHBoxLayout()
         self._panels = []
         for name in ("节点A", "节点B", "节点C", "节点D"):
@@ -147,17 +154,19 @@ class MonitorWindow(QtWidgets.QMainWindow):
             self._panels.append(p)
         layout.addLayout(panelsRow, stretch=1)
 
+        # 状态缓存
         self._nodeAddrs = {}
         self._statsMap = {}
 
     def _onPanelLog(self, name, text):
-        # 解析地址
+        # 解析节点地址：*** NODE X ***
         m = text.find("*** NODE")
         if m >= 0:
             rest = text[m+9:]
             for c in rest:
                 if c.isdigit():
                     self._nodeAddrs[name] = c
+                    # 更新面板标题
                     for p in self._panels:
                         if p.title().startswith(name):
                             p.setTitle(f"{name} - Node {c}")
@@ -165,7 +174,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
                     self._updateRoute()
                     break
 
-        # 统计
+        # 解析统计数据：去掉行头的 [节点X] 前缀
         s = text.strip()
         if s.startswith("[") and "]" in s:
             s = s.split("]", 1)[1].strip()
@@ -179,7 +188,9 @@ class MonitorWindow(QtWidgets.QMainWindow):
 
     def _updateRoute(self):
         self._routeText.clear()
-        lines = [f"{name}: Node {addr}" for name, addr in self._nodeAddrs.items()]
+        lines = []
+        for name, addr in self._nodeAddrs.items():
+            lines.append(f"{name}: Node {addr}")
         if lines:
             self._routeText.append("\n".join(lines))
 
@@ -188,7 +199,10 @@ class MonitorWindow(QtWidgets.QMainWindow):
         keys = ["TX packets", "RX packets", "HB sent", "HB recv",
                 "ACK sent", "ACK recv", "CRC good", "CRC bad",
                 "RSSI", "SNR"]
-        out = [self._statsMap[k] for k in keys if k in self._statsMap]
+        out = []
+        for k in keys:
+            if k in self._statsMap:
+                out.append(self._statsMap[k])
         if out:
             self._statsText.append("\n".join(out))
 
