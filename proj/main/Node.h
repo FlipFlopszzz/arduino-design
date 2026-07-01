@@ -210,19 +210,17 @@ private:
   }
 
   void decodeRoute(byte sender, String& data) {
+    // 间接学习仅做通知，不修改路由表状态
+    // 直接心跳（markOnline）才是维护节点在线的唯一途径
+    // 否则死节点会被其他节点的心跳永久续命
     for (int i = 0; i < MAX_NODES && i < (int)data.length(); i++) {
       if (data.charAt(i) == '1') {
         byte reportedAddr = idxAddr(i);
         if (reportedAddr != myAddr && reportedAddr != sender) {
-          // 间接学习：只知道这个节点曾经在线，但不确定它现在还活着
-          // 只对新出现的节点标记在线，但不刷新 lastSeen
-          // 只有直接心跳（markOnline）才能刷新 lastSeen
           if (!route[i].online) {
-            route[i].online = true;
-            route[i].lastSeen = millis();
-            Serial.print(F("[NET] Learn "));
+            Serial.print(F("[NET] Reported "));
             Serial.print((char)reportedAddr);
-            Serial.println(F(" via hb"));
+            Serial.println(F(" online"));
           }
         }
       }
