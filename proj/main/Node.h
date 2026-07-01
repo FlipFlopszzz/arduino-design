@@ -210,21 +210,7 @@ private:
   }
 
   void decodeRoute(byte sender, String& data) {
-    // 间接学习仅做通知，不修改路由表状态
-    // 直接心跳（markOnline）才是维护节点在线的唯一途径
-    // 否则死节点会被其他节点的心跳永久续命
-    for (int i = 0; i < MAX_NODES && i < (int)data.length(); i++) {
-      if (data.charAt(i) == '1') {
-        byte reportedAddr = idxAddr(i);
-        if (reportedAddr != myAddr && reportedAddr != sender) {
-          if (!route[i].online) {
-            Serial.print(F("[NET] Reported "));
-            Serial.print((char)reportedAddr);
-            Serial.println(F(" online"));
-          }
-        }
-      }
-    }
+    // reserve for future use
   }
 
   // ---------------------- 状态 ----------------------

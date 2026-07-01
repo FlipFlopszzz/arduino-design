@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """LoRa 四节点自组网监控 — PySide6"""
 
-import sys
+import sys, re
 from PySide6 import QtWidgets, QtCore, QtSerialPort
 
 
@@ -154,36 +154,32 @@ class MonitorWindow(QtWidgets.QMainWindow):
             self._panels.append(p)
         layout.addLayout(panelsRow, stretch=1)
 
-        # 状态缓存
-        self._nodeAddrs = {}         # panel_name -> node_addr
-        self._onlineNodes = set()    # all online node addresses
         self._statsMap = {}
 
     def _onPanelLog(self, name, text):
         s = text.strip()
 
-        # 遇到 *** NODE 标记新的 S 回复开始，清空在线节点集重建
-        m = text.find("*** NODE")
-        if m >= 0:
-            self._onlineNodes.clear()
-            rest = text[m+9:]
+        # 更新面板标题：*** NODE X ***
+        if "*** NODE" in text:
+            rest = text[text.find("*** NODE")+9:]
             for c in rest:
                 if c.isdigit():
-                    self._nodeAddrs[name] = c
                     for p in self._panels:
                         if p.title().startswith(name):
                             p.setTitle(f"{name} - Node {c}")
                             break
                     break
 
-        # 从路由表（X: ON / X: SELF 行）提取在线节点
-        if ": ON" in s or ": SELF" in s:
-            addr = s[0]
-            if addr.isdigit():
-                self._onlineNodes.add(addr)
-                self._updateRoute()
+        # 路由表行：--- ROUTE --- 清空，X: ON/SELF 追加，SELF→ON
+        if s == "--- ROUTE ---":
+            self._routeText.clear()
+            return
+        m = re.match(r"^(\d): (ON|SELF)$", s)
+        if m:
+            self._routeText.append(f"{m.group(1)}: ON")
+            return
 
-        # 统计：去掉行头的 [节点X] 前缀
+        # 统计（去前缀）
         if s.startswith("[") and "]" in s:
             s = s.split("]", 1)[1].strip()
         for kw in ["TX packets", "RX packets", "HB sent", "HB recv",
@@ -193,20 +189,6 @@ class MonitorWindow(QtWidgets.QMainWindow):
                 self._statsMap[kw] = s
                 self._updateStats()
                 break
-
-    def _updateRoute(self):
-        self._routeText.clear()
-        lines = []
-        # 先显示已映射到面板的节点
-        for name, addr in sorted(self._nodeAddrs.items()):
-            lines.append(f"{name}: Node {addr}")
-        # 再显示未映射的在线节点
-        mapped = set(self._nodeAddrs.values())
-        for addr in sorted(self._onlineNodes):
-            if addr not in mapped:
-                lines.append(f"Node {addr}: ON")
-        if lines:
-            self._routeText.append("\n".join(lines))
 
     def _updateStats(self):
         self._statsText.clear()
