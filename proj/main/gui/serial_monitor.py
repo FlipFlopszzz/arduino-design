@@ -162,9 +162,10 @@ class MonitorWindow(QtWidgets.QMainWindow):
     def _onPanelLog(self, name, text):
         s = text.strip()
 
-        # 解析当前面板的节点地址并更新标题
+        # 遇到 *** NODE 标记新的 S 回复开始，清空在线节点集重建
         m = text.find("*** NODE")
         if m >= 0:
+            self._onlineNodes.clear()
             rest = text[m+9:]
             for c in rest:
                 if c.isdigit():
@@ -175,7 +176,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
                             break
                     break
 
-        # 从路由表（X: ON 行）提取所有在线节点
+        # 从路由表（X: ON / X: SELF 行）提取在线节点
         if ": ON" in s or ": SELF" in s:
             addr = s[0]
             if addr.isdigit():
