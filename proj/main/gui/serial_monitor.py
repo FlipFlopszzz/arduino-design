@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """LoRa 四节点自组网监控 — PySide6"""
-
 import sys, re
 from PySide6 import QtWidgets, QtCore, QtSerialPort
 
@@ -19,38 +18,111 @@ class SerialPanel(QtWidgets.QGroupBox):
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(2)
-        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setContentsMargins(3, 3, 3, 3)
 
-        # 第一行：COM口 + 连接按钮
-        row1 = QtWidgets.QHBoxLayout()
-        row1.setSpacing(4)
+        # ── R1：COM口 + 连接 ──
+        r1 = QtWidgets.QHBoxLayout()
+        r1.setSpacing(3)
         self._portCb = QtWidgets.QComboBox()
         self._portCb.setEditable(True)
-        # 扫描真实串口
         for info in QtSerialPort.QSerialPortInfo.availablePorts():
             self._portCb.addItem(info.portName())
         self._connBtn = QtWidgets.QPushButton("连接")
         self._connBtn.clicked.connect(self._toggleConn)
-        row1.addWidget(self._portCb, stretch=1)
-        row1.addWidget(self._connBtn)
-        layout.addLayout(row1)
+        r1.addWidget(self._portCb, stretch=1)
+        r1.addWidget(self._connBtn)
+        layout.addLayout(r1)
 
-        # 第二行：命令输入 + 发送按钮
-        row2 = QtWidgets.QHBoxLayout()
-        row2.setSpacing(4)
-        self._cmdE = QtWidgets.QLineEdit()
-        self._cmdE.setPlaceholderText("命令")
-        self._cmdE.returnPressed.connect(self._sendCmd)
-        self._sendBtn = QtWidgets.QPushButton("发送")
-        self._sendBtn.clicked.connect(self._sendCmd)
-        row2.addWidget(self._cmdE)
-        row2.addWidget(self._sendBtn)
-        layout.addLayout(row2)
+        # ── R2：单播 ──
+        r2 = QtWidgets.QHBoxLayout()
+        r2.setSpacing(3)
+        self._uniTarget = QtWidgets.QComboBox()
+        self._uniTarget.addItems(["1", "2", "3", "4"])
+        self._uniTarget.setFixedWidth(36)
+        self._uniMsg = QtWidgets.QLineEdit()
+        self._uniMsg.setPlaceholderText("消息")
+        self._uniBtn = QtWidgets.QPushButton("单播")
+        self._uniBtn.clicked.connect(self._sendUnicast)
+        self._uniMsg.returnPressed.connect(self._sendUnicast)
+        r2.addWidget(self._uniTarget)
+        r2.addWidget(self._uniMsg, stretch=1)
+        r2.addWidget(self._uniBtn)
+        layout.addLayout(r2)
 
-        # 第三行：日志输出框（填满剩余空间）
+        # ── R3：广播 ──
+        r3 = QtWidgets.QHBoxLayout()
+        r3.setSpacing(3)
+        self._bcastMsg = QtWidgets.QLineEdit()
+        self._bcastMsg.setPlaceholderText("广播消息")
+        self._bcastBtn = QtWidgets.QPushButton("广播")
+        self._bcastBtn.clicked.connect(self._sendBroadcast)
+        self._bcastMsg.returnPressed.connect(self._sendBroadcast)
+        r3.addWidget(self._bcastMsg, stretch=1)
+        r3.addWidget(self._bcastBtn)
+        layout.addLayout(r3)
+
+        # ── R4：Ping + 快捷按钮 ──
+        r4 = QtWidgets.QHBoxLayout()
+        r4.setSpacing(3)
+        r4.addWidget(QtWidgets.QLabel("Ping→"))
+        self._pingTarget = QtWidgets.QComboBox()
+        self._pingTarget.addItems(["1", "2", "3", "4"])
+        self._pingTarget.setFixedWidth(32)
+        self._pingCount = QtWidgets.QSpinBox()
+        self._pingCount.setRange(1, 100)
+        self._pingCount.setValue(10)
+        self._pingCount.setFixedWidth(44)
+        r4.addWidget(self._pingTarget)
+        r4.addWidget(self._pingCount)
+        r4.addWidget(QtWidgets.QLabel("次"))
+        r4.addSpacing(4)
+        self._pingBtn = QtWidgets.QPushButton("Ping")
+        self._pingBtn.clicked.connect(self._sendPing)
+        r4.addWidget(self._pingBtn)
+        r4.addSpacing(4)
+        self._statusBtn = QtWidgets.QPushButton("状态(S)")
+        self._statusBtn.clicked.connect(lambda: self._write("S"))
+        self._leaveBtn = QtWidgets.QPushButton("退网(L)")
+        self._leaveBtn.clicked.connect(lambda: self._write("L"))
+        self._resetBtn = QtWidgets.QPushButton("重置(R)")
+        self._resetBtn.clicked.connect(lambda: self._write("R"))
+        r4.addWidget(self._statusBtn)
+        r4.addWidget(self._leaveBtn)
+        r4.addWidget(self._resetBtn)
+        layout.addLayout(r4)
+
+        # 日志框
         self._logT = QtWidgets.QTextEdit()
         self._logT.setReadOnly(True)
+        self._logT.setStyleSheet("font-family: Consolas; font-size: 10px;")
         layout.addWidget(self._logT, stretch=1)
+
+        self.setMinimumWidth(200)
+
+    # ---------- 串口操作 ----------
+    def _write(self, cmd):
+        if self._serial.isOpen():
+            self._log(f"[CMD] {cmd}")
+            self._serial.write((cmd + "\n").encode())
+            self._serial.waitForBytesWritten(300)
+
+    def _sendUnicast(self):
+        t = self._uniTarget.currentText()
+        msg = self._uniMsg.text().strip()
+        if msg:
+            self._write(f"D{t}{msg}")
+            self._uniMsg.clear()
+
+    def _sendBroadcast(self):
+        msg = self._bcastMsg.text().strip()
+        if msg:
+            self._write(f"B{msg}")
+            self._bcastMsg.clear()
+
+    def _sendPing(self):
+        t = self._pingTarget.currentText()
+        n = self._pingCount.value()
+        self._write(f"T{t}{n}")
 
     def _toggleConn(self):
         if not self._connected:
@@ -62,7 +134,6 @@ class SerialPanel(QtWidgets.QGroupBox):
             self._serial.setStopBits(QtSerialPort.QSerialPort.StopBits.OneStop)
             self._serial.setFlowControl(QtSerialPort.QSerialPort.FlowControl.NoFlowControl)
             if self._serial.open(QtCore.QIODevice.OpenModeFlag.ReadWrite):
-                # 禁用 DTR 防止 Arduino 复位
                 self._serial.setDataTerminalReady(False)
                 QtCore.QThread.msleep(300)
                 self._serial.clear()
@@ -71,21 +142,13 @@ class SerialPanel(QtWidgets.QGroupBox):
                 self._connBtn.setText("断开")
                 self._log("[SYS] 串口已连接")
             else:
-                self._log(f"[ERR] 连接失败: {self._serial.errorString()}")
+                self._log(f"[ERR] 失败: {self._serial.errorString()}")
         else:
             self._serial.close()
             self._connected = False
             self._connBtn.setText("连接")
             self.setTitle(self._name)
-            self._log("[SYS] 串口已断开")
-
-    def _sendCmd(self):
-        cmd = self._cmdE.text().strip()
-        if cmd and self._serial.isOpen():
-            self._log(f"[CMD] {cmd}")
-            self._serial.write((cmd + "\n").encode())
-            self._serial.waitForBytesWritten(500)
-            self._cmdE.clear()
+            self._log("[SYS] 已断开")
 
     def _onRead(self):
         raw = self._serial.readAll().data()
@@ -99,9 +162,7 @@ class SerialPanel(QtWidgets.QGroupBox):
                 text = line.decode("utf-8", errors="replace")
             except:
                 continue
-            # 显示到本面板日志
             self._log(text)
-            # 发送给主窗口解析
             self.logSignal.emit(self._name, text)
 
     def _onErr(self, err):
@@ -123,34 +184,35 @@ class MonitorWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LoRa 自组网监控")
-        self.resize(1100, 650)
+        self.resize(1600, 750)
 
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
         layout = QtWidgets.QVBoxLayout(central)
-        layout.setSpacing(4)
+        layout.setSpacing(3)
 
-        # 上方：路由表 + 网络统计（并排）
+        # 上方：路由表 + 网络统计
         infoRow = QtWidgets.QHBoxLayout()
         self._routeText = QtWidgets.QTextEdit()
         self._routeText.setReadOnly(True)
-        self._routeText.setMaximumHeight(150)
+        self._routeText.setMaximumHeight(120)
         self._routeText.setPlaceholderText("路由表")
         self._statsText = QtWidgets.QTextEdit()
         self._statsText.setReadOnly(True)
-        self._statsText.setMaximumHeight(150)
+        self._statsText.setMaximumHeight(120)
         self._statsText.setPlaceholderText("网络统计")
         infoRow.addWidget(self._routeText)
         infoRow.addWidget(self._statsText)
         layout.addLayout(infoRow)
 
-        # 中间：四个节点面板
+        # 四个节点面板（等分填满）
         panelsRow = QtWidgets.QHBoxLayout()
+        panelsRow.setSpacing(3)
         self._panels = []
         for name in ("节点A", "节点B", "节点C", "节点D"):
             p = SerialPanel(name)
             p.logSignal.connect(self._onPanelLog)
-            panelsRow.addWidget(p)
+            panelsRow.addWidget(p, stretch=1)
             self._panels.append(p)
         layout.addLayout(panelsRow, stretch=1)
 
@@ -159,18 +221,16 @@ class MonitorWindow(QtWidgets.QMainWindow):
     def _onPanelLog(self, name, text):
         s = text.strip()
 
-        # 更新面板标题：*** NODE X ***
         if "*** NODE" in text:
-            rest = text[text.find("*** NODE")+9:]
+            rest = text[text.find("*** NODE") + 9:]
             for c in rest:
                 if c.isdigit():
                     for p in self._panels:
                         if p.title().startswith(name):
-                            p.setTitle(f"{name} - Node {c}")
+                            p.setTitle(f"{name} - N{c}")
                             break
                     break
 
-        # 路由表行：--- ROUTE --- 清空，X: ON/SELF 追加，SELF→ON
         if s == "--- ROUTE ---":
             self._routeText.clear()
             return
@@ -179,7 +239,6 @@ class MonitorWindow(QtWidgets.QMainWindow):
             self._routeText.append(f"{m.group(1)}: ON")
             return
 
-        # 统计（去前缀）
         if s.startswith("[") and "]" in s:
             s = s.split("]", 1)[1].strip()
         for kw in ["TX packets", "RX packets", "HB sent", "HB recv",
@@ -195,10 +254,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
         keys = ["TX packets", "RX packets", "HB sent", "HB recv",
                 "ACK sent", "ACK recv", "CRC good", "CRC bad",
                 "RSSI", "SNR"]
-        out = []
-        for k in keys:
-            if k in self._statsMap:
-                out.append(self._statsMap[k])
+        out = [self._statsMap[k] for k in keys if k in self._statsMap]
         if out:
             self._statsText.append("\n".join(out))
 
