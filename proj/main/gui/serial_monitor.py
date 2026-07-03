@@ -38,7 +38,7 @@ class SerialPanel(QtWidgets.QGroupBox):
         r2.setSpacing(3)
         self._uniTarget = QtWidgets.QComboBox()
         self._uniTarget.addItems(["1", "2", "3", "4"])
-        self._uniTarget.setFixedWidth(36)
+        self._uniTarget.setFixedWidth(60)
         self._uniMsg = QtWidgets.QLineEdit()
         self._uniMsg.setPlaceholderText("消息")
         self._uniBtn = QtWidgets.QPushButton("单播")
@@ -67,11 +67,10 @@ class SerialPanel(QtWidgets.QGroupBox):
         r4.addWidget(QtWidgets.QLabel("Ping→"))
         self._pingTarget = QtWidgets.QComboBox()
         self._pingTarget.addItems(["1", "2", "3", "4"])
-        self._pingTarget.setFixedWidth(32)
-        self._pingCount = QtWidgets.QSpinBox()
-        self._pingCount.setRange(1, 100)
-        self._pingCount.setValue(10)
-        self._pingCount.setFixedWidth(44)
+        self._pingTarget.setFixedWidth(60)
+        self._pingCount = QtWidgets.QLineEdit()
+        self._pingCount.setText("10")
+        self._pingCount.setFixedWidth(60)
         r4.addWidget(self._pingTarget)
         r4.addWidget(self._pingCount)
         r4.addWidget(QtWidgets.QLabel("次"))
@@ -121,7 +120,10 @@ class SerialPanel(QtWidgets.QGroupBox):
 
     def _sendPing(self):
         t = self._pingTarget.currentText()
-        n = self._pingCount.value()
+        try:
+            n = int(self._pingCount.text())
+        except ValueError:
+            n = 10
         self._write(f"T{t}{n}")
 
     def _toggleConn(self):
@@ -184,7 +186,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LoRa 自组网监控")
-        self.resize(1600, 750)
+        self.resize(1800, 750)
 
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
