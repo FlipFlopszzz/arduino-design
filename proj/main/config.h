@@ -7,11 +7,10 @@
 #define LORA_SYNC_WORD 0xcd
 
 // 地址定义
-#define ADDR_NONE 0x30       // ASCII '0'
-#define ADDR_FIRST 0x31      // ASCII '1'
-#define ADDR_LAST 0x34       // ASCII '4', 最多4个节点
-#define ADDR_BCAST 0x41      // ASCII 'A', 广播地址
-#define MAX_NODES 4
+#define ADDR_NONE 0          // 未分配
+#define ADDR_FIRST 1         // 起始节点号
+#define ADDR_BCAST 0xFF      // 广播地址
+#define MAX_NODES 20         // 最大节点数
 
 // 功能码
 #define F_JOIN_REQ 'J'       // 申请入网

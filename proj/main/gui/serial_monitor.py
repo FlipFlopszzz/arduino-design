@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""LoRa 四节点自组网监控 — PySide6"""
+"""LoRa 自组网监控 — PySide6"""
 import sys, re
 from PySide6 import QtWidgets, QtCore, QtSerialPort
+from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
+from PySide6.QtGui import QPainter, QColor, QPen
+
+
+PANEL_COLORS = ["#00ff00", "#00ffff", "#ffff00", "#ff8800"]
+PANEL_NAMES = ["节点A", "节点B", "节点C", "节点D"]
 
 
 class SerialPanel(QtWidgets.QGroupBox):
     logSignal = QtCore.Signal(str, str)
 
-    def __init__(self, name):
+    def __init__(self, name, idx):
         super().__init__(name)
+        self._idx = idx
         self._name = name
         self._serial = QtSerialPort.QSerialPort()
         self._serial.readyRead.connect(self._onRead)
@@ -37,7 +44,8 @@ class SerialPanel(QtWidgets.QGroupBox):
         r2 = QtWidgets.QHBoxLayout()
         r2.setSpacing(3)
         self._uniTarget = QtWidgets.QComboBox()
-        self._uniTarget.addItems(["1", "2", "3", "4"])
+        self._uniTarget.addItems([str(i) for i in range(1, 21)])
+        self._uniTarget.setEditable(True)
         self._uniTarget.setFixedWidth(60)
         self._uniMsg = QtWidgets.QLineEdit()
         self._uniMsg.setPlaceholderText("消息")
@@ -64,9 +72,9 @@ class SerialPanel(QtWidgets.QGroupBox):
         # ── R4：Ping + 快捷按钮 ──
         r4 = QtWidgets.QHBoxLayout()
         r4.setSpacing(3)
-        r4.addWidget(QtWidgets.QLabel("Ping→"))
         self._pingTarget = QtWidgets.QComboBox()
-        self._pingTarget.addItems(["1", "2", "3", "4"])
+        self._pingTarget.addItems([str(i) for i in range(1, 21)])
+        self._pingTarget.setEditable(True)
         self._pingTarget.setFixedWidth(60)
         self._pingCount = QtWidgets.QLineEdit()
         self._pingCount.setText("10")
@@ -74,6 +82,9 @@ class SerialPanel(QtWidgets.QGroupBox):
         r4.addWidget(self._pingTarget)
         r4.addWidget(self._pingCount)
         r4.addWidget(QtWidgets.QLabel("次"))
+        self._clearBtn = QtWidgets.QPushButton("清屏")
+        self._clearBtn.clicked.connect(self._clearLog)
+        r4.addWidget(self._clearBtn)
         r4.addSpacing(4)
         self._pingBtn = QtWidgets.QPushButton("Ping")
         self._pingBtn.clicked.connect(self._sendPing)
@@ -90,10 +101,47 @@ class SerialPanel(QtWidgets.QGroupBox):
         r4.addWidget(self._resetBtn)
         layout.addLayout(r4)
 
-        # 日志框
+        # ── R5：本节点 RSSI 折线图 ──
+        self._rssi_samples = []
+        self._rssi_max = 50
+
+        self._rssi_series = QLineSeries()
+        c = QColor(PANEL_COLORS[idx])
+        c.setAlpha(200)
+        self._rssi_series.setPen(QPen(c, 2))
+
+        self._rssi_chart = QChart()
+        self._rssi_chart.addSeries(self._rssi_series)
+        self._rssi_chart.setTitle("RSSI (dBm)")
+        self._rssi_chart.legend().hide()
+        self._rssi_chart.setAnimationOptions(QChart.AnimationOptions.NoAnimation)
+        self._rssi_chart.setBackgroundBrush(QColor("#2d2d2d"))
+        self._rssi_chart.setPlotAreaBackgroundVisible(False)
+
+        self._axis_x = QValueAxis()
+        self._axis_x.setRange(0, self._rssi_max)
+        self._axis_x.setVisible(False)
+        self._rssi_chart.addAxis(self._axis_x, QtCore.Qt.Alignment.AlignBottom)
+        self._rssi_series.attachAxis(self._axis_x)
+
+        self._axis_y = QValueAxis()
+        self._axis_y.setRange(-110, -20)
+        self._axis_y.setLabelFormat("%d")
+        self._axis_y.setLabelsColor(QColor("#999"))
+        self._axis_y.setGridLineColor(QColor("#444"))
+        self._axis_y.setTickCount(4)
+        self._rssi_chart.addAxis(self._axis_y, QtCore.Qt.Alignment.AlignLeft)
+        self._rssi_series.attachAxis(self._axis_y)
+
+        self._rssi_view = QChartView(self._rssi_chart)
+        self._rssi_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self._rssi_view.setMinimumHeight(90)
+        self._rssi_view.setMaximumHeight(110)
+        layout.addWidget(self._rssi_view)
+
+        # ── R6：日志框 ──
         self._logT = QtWidgets.QTextEdit()
         self._logT.setReadOnly(True)
-        self._logT.setStyleSheet("font-family: Consolas; font-size: 10px;")
         layout.addWidget(self._logT, stretch=1)
 
         self.setMinimumWidth(200)
@@ -105,11 +153,20 @@ class SerialPanel(QtWidgets.QGroupBox):
             self._serial.write((cmd + "\n").encode())
             self._serial.waitForBytesWritten(300)
 
+    def is_connected(self):
+        return self._connected
+
+    def send_broadcast_raw(self, msg):
+        """供 MonitorWindow 轮询调用，不写日志"""
+        if self._serial.isOpen():
+            self._serial.write((f"B{msg}\n").encode())
+            self._serial.waitForBytesWritten(100)
+
     def _sendUnicast(self):
         t = self._uniTarget.currentText()
         msg = self._uniMsg.text().strip()
         if msg:
-            self._write(f"D{t}{msg}")
+            self._write(f"D{t} {msg}")
             self._uniMsg.clear()
 
     def _sendBroadcast(self):
@@ -119,12 +176,12 @@ class SerialPanel(QtWidgets.QGroupBox):
             self._bcastMsg.clear()
 
     def _sendPing(self):
-        t = self._pingTarget.currentText()
+        t = self._pingTarget.currentText().strip()
         try:
             n = int(self._pingCount.text())
         except ValueError:
             n = 10
-        self._write(f"T{t}{n}")
+        self._write(f"T{t} {n}")
 
     def _toggleConn(self):
         if not self._connected:
@@ -142,7 +199,7 @@ class SerialPanel(QtWidgets.QGroupBox):
                 self._buf = b""
                 self._connected = True
                 self._connBtn.setText("断开")
-                self._log("[SYS] 串口已连接")
+                self._log("[DEBUG] 串口已连接")
             else:
                 self._log(f"[ERR] 失败: {self._serial.errorString()}")
         else:
@@ -150,7 +207,7 @@ class SerialPanel(QtWidgets.QGroupBox):
             self._connected = False
             self._connBtn.setText("连接")
             self.setTitle(self._name)
-            self._log("[SYS] 已断开")
+            self._log("[DEBUG] 已断开")
 
     def _onRead(self):
         raw = self._serial.readAll().data()
@@ -165,11 +222,24 @@ class SerialPanel(QtWidgets.QGroupBox):
             except:
                 continue
             self._log(text)
+            self._handeRssi(text)
             self.logSignal.emit(self._name, text)
+
+    def _handeRssi(self, text):
+        m = re.search(r"\[RSSI\s*(-?\d+)", text)
+        if not m:
+            return
+        val = int(m.group(1))
+        self._rssi_samples.append(val)
+        if len(self._rssi_samples) > self._rssi_max:
+            self._rssi_samples.pop(0)
+        self._rssi_series.clear()
+        for i, v in enumerate(self._rssi_samples):
+            self._rssi_series.append(i, v)
 
     def _onErr(self, err):
         if err == QtSerialPort.QSerialPort.SerialPortError.ResourceError and self._connected:
-            self._log("[SYS] 串口断开")
+            self._log("[DEBUG] 串口断开")
 
     def _log(self, msg):
         self._logT.append(msg)
@@ -181,12 +251,18 @@ class SerialPanel(QtWidgets.QGroupBox):
             self._serial.close()
         self._connected = False
 
+    def _clearLog(self):
+        self._logT.clear()
+        self._log("[DEBUG] 已清屏")
+        self._rssi_samples.clear()
+        self._rssi_series.clear()
+
 
 class MonitorWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("LoRa 自组网监控")
-        self.resize(1800, 750)
+        self.resize(1800, 850)
 
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
@@ -197,22 +273,22 @@ class MonitorWindow(QtWidgets.QMainWindow):
         infoRow = QtWidgets.QHBoxLayout()
         self._routeText = QtWidgets.QTextEdit()
         self._routeText.setReadOnly(True)
-        self._routeText.setMaximumHeight(120)
+        self._routeText.setMaximumHeight(100)
         self._routeText.setPlaceholderText("路由表")
         self._statsText = QtWidgets.QTextEdit()
         self._statsText.setReadOnly(True)
-        self._statsText.setMaximumHeight(120)
+        self._statsText.setMaximumHeight(100)
         self._statsText.setPlaceholderText("网络统计")
         infoRow.addWidget(self._routeText)
         infoRow.addWidget(self._statsText)
         layout.addLayout(infoRow)
 
-        # 四个节点面板（等分填满）
+        # 下部：四个节点面板（等分填满）
         panelsRow = QtWidgets.QHBoxLayout()
         panelsRow.setSpacing(3)
         self._panels = []
-        for name in ("节点A", "节点B", "节点C", "节点D"):
-            p = SerialPanel(name)
+        for i, name in enumerate(PANEL_NAMES):
+            p = SerialPanel(name, i)
             p.logSignal.connect(self._onPanelLog)
             panelsRow.addWidget(p, stretch=1)
             self._panels.append(p)
@@ -220,25 +296,37 @@ class MonitorWindow(QtWidgets.QMainWindow):
 
         self._statsMap = {}
 
+        # ── RSSI 轮询定时器 ──
+        self._poll_idx = 0
+        self._poll_timer = QtCore.QTimer()
+        self._poll_timer.timeout.connect(self._doPoll)
+        self._poll_timer.start(3000)
+
+    def _doPoll(self):
+        """轮流向已连接的节点发广播，触发其他节点回传 RSSI"""
+        for _ in range(len(self._panels)):
+            p = self._panels[self._poll_idx]
+            self._poll_idx = (self._poll_idx + 1) % len(self._panels)
+            if p.is_connected():
+                p.send_broadcast_raw("_")
+                break
+
     def _onPanelLog(self, name, text):
         s = text.strip()
 
-        if "*** NODE" in text:
-            rest = text[text.find("*** NODE") + 9:]
-            for c in rest:
-                if c.isdigit():
-                    for p in self._panels:
-                        if p.title().startswith(name):
-                            p.setTitle(f"{name} - N{c}")
-                            break
+        m = re.search(r"\*\*\* NODE (\d+)", text)
+        if m:
+            for p in self._panels:
+                if p.title().startswith(name):
+                    p.setTitle(f"{name} - N{m.group(1)}")
                     break
 
         if s == "--- ROUTE ---":
             self._routeText.clear()
             return
-        m = re.match(r"^(\d): (ON|SELF)$", s)
+        m = re.match(r"^N(\d+): (ON|SELF)$", s)
         if m:
-            self._routeText.append(f"{m.group(1)}: ON")
+            self._routeText.append(f"N{m.group(1)}: {m.group(2)}")
             return
 
         if s.startswith("[") and "]" in s:
@@ -261,6 +349,7 @@ class MonitorWindow(QtWidgets.QMainWindow):
             self._statsText.append("\n".join(out))
 
     def closeEvent(self, event):
+        self._poll_timer.stop()
         for p in self._panels:
             p.cleanup()
         super().closeEvent(event)

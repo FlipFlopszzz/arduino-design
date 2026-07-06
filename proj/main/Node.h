@@ -114,8 +114,8 @@ private:
     int i = addrIdx(addr);
     if (i < 0 || i >= MAX_NODES || i == addrIdx(myAddr)) return;
     if (!route[i].online) {
-      Serial.print(F("[NET] "));
-      Serial.print((char)addr);
+      Serial.print(F("[NET] N"));
+      Serial.print(addr);
       Serial.println(F(" ON"));
     }
     route[i].online = true;
@@ -126,8 +126,8 @@ private:
     int i = addrIdx(addr);
     if (i < 0 || i >= MAX_NODES) return;
     if (route[i].online) {
-      Serial.print(F("[NET] "));
-      Serial.print((char)addr);
+      Serial.print(F("[NET] N"));
+      Serial.print(addr);
       Serial.println(F(" OFF"));
     }
     route[i].online = false;
@@ -296,15 +296,15 @@ public:
 
   void onScanMsg(Message& msg) {
     // 只对心跳消息反应，避免被其他组的干扰数据误导
-    if (msg.Function == F_HEARTBEAT && msg.SAddr >= ADDR_FIRST && msg.SAddr <= ADDR_LAST) {
+    if (msg.Function == F_HEARTBEAT && msg.SAddr >= ADDR_FIRST && addrIdx(msg.SAddr) < MAX_NODES) {
       joinTarget = msg.SAddr;
       joinRetries = 0;
       joinTimer = 0;
       setState(STATE_JOINING);
       sendJoinReq();
       joinTimer = millis();
-      Serial.print(F("[S] Join via "));
-      Serial.println((char)joinTarget);
+      Serial.print(F("[S] Join via N"));
+      Serial.println(joinTarget);
     }
   }
 
@@ -341,15 +341,15 @@ public:
 
   void onClaimMsg(Message& msg) {
     // 竞选期间听到已有节点的心跳 → 放弃竞选，加入
-    if (msg.Function == F_HEARTBEAT && msg.SAddr >= ADDR_FIRST && msg.SAddr <= ADDR_LAST) {
+    if (msg.Function == F_HEARTBEAT && msg.SAddr >= ADDR_FIRST && addrIdx(msg.SAddr) < MAX_NODES) {
       joinTarget = msg.SAddr;
       joinRetries = 0;
       joinTimer = 0;
       setState(STATE_JOINING);
       sendJoinReq();
       joinTimer = millis();
-      Serial.print(F("[S] Join via "));
-      Serial.println((char)joinTarget);
+      Serial.print(F("[S] Join via N"));
+      Serial.println(joinTarget);
       return;
     }
     // 听到其他竞选声明 → 比较大小
@@ -397,8 +397,8 @@ public:
     rapidBeaconCount = RAPID_BEACONS;
     lastHeartbeat = 0;
     setState(STATE_IN_NETWORK);
-    Serial.print(F("[NET] Self "));
-    Serial.println((char)myAddr);
+    Serial.print(F("[NET] Self N"));
+    Serial.println(myAddr);
     printNodeBanner();
   }
 
@@ -420,7 +420,7 @@ public:
       byte recvToken = (byte)msg.MsgData.charAt(0);
       if (recvToken != joinToken) return;
       byte a = (byte)msg.MsgData.charAt(1);
-      if (a >= ADDR_FIRST && a <= ADDR_LAST) {
+      if (a >= ADDR_FIRST && addrIdx(a) < MAX_NODES) {
         myAddr = a;
         route[addrIdx(myAddr)].online = true;
         route[addrIdx(myAddr)].lastSeen = millis();
@@ -428,8 +428,8 @@ public:
         rapidBeaconCount = RAPID_BEACONS;
         lastHeartbeat = 0;
         setState(STATE_IN_NETWORK);
-        Serial.print(F("[NET] Join "));
-        Serial.println((char)myAddr);
+        Serial.print(F("[NET] Join N"));
+        Serial.println(myAddr);
         printNodeBanner();
       }
     }
@@ -440,8 +440,8 @@ public:
     if (millis() - joinTimer < ACK_TIMEOUT) return;
     joinRetries++;
     if (joinRetries >= RETRY_MAX) {
-      Serial.print(F("[NET] Join fail to "));
-      Serial.println((char)joinTarget);
+      Serial.print(F("[NET] Join fail to N"));
+      Serial.println(joinTarget);
       canClaim = true;
       startScan();
       return;
@@ -454,8 +454,8 @@ public:
   void onNetMsg(Message& msg) {
     // 地址冲突检测：听到了与我相同地址的节点
     if (msg.SAddr == myAddr && msg.Function != F_JOIN_REQ && msg.Function != F_JOIN_ACK) {
-      Serial.print(F("[NET] Conflict "));
-      Serial.println((char)myAddr);
+      Serial.print(F("[NET] Conflict N"));
+      Serial.println(myAddr);
       resetRoute();
       myAddr = ADDR_NONE;
       canClaim = true;  // 冲突重置，允许重新竞选
@@ -463,7 +463,7 @@ public:
       return;
     }
     // 任何消息 -> 源在线
-    if (msg.SAddr >= ADDR_FIRST && msg.SAddr <= ADDR_LAST && msg.SAddr != myAddr)
+    if (msg.SAddr >= ADDR_FIRST && addrIdx(msg.SAddr) < MAX_NODES && msg.SAddr != myAddr)
       markOnline(msg.SAddr);
 
     // 心跳携带路由表 -> 间接学习（暂注释，直接听心跳即可知在线）
@@ -521,8 +521,8 @@ public:
   void handleData(Message& msg) {
     int rssi = LoRa.packetRssi();
     float snr = LoRa.packetSnr();
-    Serial.print(F("[RX] <"));
-    Serial.print((char)msg.SAddr);
+    Serial.print(F("[RX] <N"));
+    Serial.print(msg.SAddr);
     Serial.print(F(": "));
     Serial.print(msg.MsgData);
     Serial.print(F(" [RSSI "));
@@ -542,8 +542,8 @@ public:
   void handleBcast(Message& msg) {
     int rssi = LoRa.packetRssi();
     float snr = LoRa.packetSnr();
-    Serial.print(F("[BCAST] <"));
-    Serial.print((char)msg.SAddr);
+    Serial.print(F("[BCAST] <N"));
+    Serial.print(msg.SAddr);
     Serial.print(F(": "));
     Serial.print(msg.MsgData);
     Serial.print(F(" [RSSI "));
@@ -649,9 +649,13 @@ public:
       case CMD_LEAVE:  doLeave(); break;
       case CMD_SEND: {
         String r = Serial.readStringUntil('\n');
-        if (r.length() >= 2) {
-          byte t = (byte)r.charAt(0);
-          r.remove(0, 1);
+        r.trim();
+        int i = 0;
+        while (i < r.length() && isDigit(r.charAt(i))) i++;
+        if (i > 0) {
+          byte t = (byte)r.substring(0, i).toInt();
+          r.remove(0, i);
+          r.trim();
           sendUnicast(t, r);
         }
         break;
@@ -662,13 +666,18 @@ public:
         break;
       }
       case CMD_TEST: {
-        // T<target><n>  e.g. T3 = ping node3, T310 = ping node3 10 times
+        // T<addr> [count]  e.g. "T3" or "T3 50"
         String r = Serial.readStringUntil('\n');
-        if (r.length() >= 1) {
-          testTargetAddr = (byte)r.charAt(0);
+        r.trim();
+        int sp = r.indexOf(' ');
+        String addrPart = (sp >= 0) ? r.substring(0, sp) : r;
+        String cntPart = (sp >= 0) ? r.substring(sp + 1) : "";
+        cntPart.trim();
+        if (addrPart.length() > 0) {
+          testTargetAddr = (byte)addrPart.toInt();
           testPacketsToSend = 10;
-          if (r.length() >= 2) {
-            int n = r.substring(1).toInt();
+          if (cntPart.length() > 0) {
+            int n = cntPart.toInt();
             if (n > 0 && n <= 100) testPacketsToSend = n;
           }
           testPacketsSent = 0;
@@ -678,8 +687,8 @@ public:
           testMode = true;
           Serial.print(F("[TEST] Sending "));
           Serial.print(testPacketsToSend);
-          Serial.print(F(" pings to "));
-          Serial.println((char)testTargetAddr);
+          Serial.print(F(" pings to N"));
+          Serial.println(testTargetAddr);
         }
         break;
       }
@@ -694,7 +703,7 @@ public:
   void printNodeBanner() {
     Serial.println(F("========================"));
     Serial.print(F("*** NODE "));
-    Serial.print((char)myAddr);
+    Serial.print(myAddr);
     Serial.println(F(" ***"));
     Serial.println(F("========================"));
   }
@@ -703,10 +712,10 @@ public:
     printNodeBanner();
     Serial.println(F("--- ROUTE ---"));
     for (int i = 0; i < MAX_NODES; i++) {
-      if (i == addrIdx(myAddr)) { Serial.print(F("  ")); Serial.print((char)myAddr); Serial.println(F(": SELF")); continue; }
+      if (i == addrIdx(myAddr)) { Serial.print(F("  N")); Serial.print(myAddr); Serial.println(F(": SELF")); continue; }
       if (!route[i].online) continue;
-      Serial.print(F("  "));
-      Serial.print((char)idxAddr(i));
+      Serial.print(F("  N"));
+      Serial.print(idxAddr(i));
       Serial.println(F(": ON"));
     }
 
@@ -766,7 +775,7 @@ public:
       }
     }
 
-    Serial.print(F("[TX] >")); Serial.print((char)t);
+    Serial.print(F("[TX] >N")); Serial.print(t);
     Serial.print(F(": ")); Serial.print(d);
     Serial.println(acked ? F(" (ACK)") : F(" (NOT ACKED)"));
   }
