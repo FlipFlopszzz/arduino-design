@@ -6,7 +6,7 @@ from PySide6.QtCharts import QChart, QChartView, QLineSeries, QValueAxis
 from PySide6.QtGui import QPainter, QColor, QPen
 
 
-PANEL_COLORS = ["#00ff00", "#00ffff", "#ffff00", "#ff8800"]
+PANEL_COLORS = ["#00ff00", "#00ffff", "#ff44ff", "#ff8800"]
 PANEL_NAMES = ["节点A", "节点B", "节点C", "节点D"]
 
 
