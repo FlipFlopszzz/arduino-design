@@ -82,9 +82,6 @@ class SerialPanel(QtWidgets.QGroupBox):
         r4.addWidget(self._pingTarget)
         r4.addWidget(self._pingCount)
         r4.addWidget(QtWidgets.QLabel("次"))
-        self._clearBtn = QtWidgets.QPushButton("清屏")
-        self._clearBtn.clicked.connect(self._clearLog)
-        r4.addWidget(self._clearBtn)
         r4.addSpacing(4)
         self._pingBtn = QtWidgets.QPushButton("Ping")
         self._pingBtn.clicked.connect(self._sendPing)
@@ -99,11 +96,15 @@ class SerialPanel(QtWidgets.QGroupBox):
         r4.addWidget(self._statusBtn)
         r4.addWidget(self._leaveBtn)
         r4.addWidget(self._resetBtn)
+        r4.addSpacing(8)
+        self._clearBtn = QtWidgets.QPushButton("清屏")
+        self._clearBtn.clicked.connect(self._clearLog)
+        r4.addWidget(self._clearBtn)
         layout.addLayout(r4)
 
         # ── R5：本节点 RSSI 折线图 ──
         self._rssi_samples = []
-        self._rssi_max = 50
+        self._rssi_max = 20  # ~1min @3s 轮询
 
         self._rssi_series = QLineSeries()
         c = QColor(PANEL_COLORS[idx])
@@ -115,8 +116,14 @@ class SerialPanel(QtWidgets.QGroupBox):
         self._rssi_chart.setTitle("RSSI (dBm)")
         self._rssi_chart.legend().hide()
         self._rssi_chart.setAnimationOptions(QChart.AnimationOptions.NoAnimation)
-        self._rssi_chart.setBackgroundBrush(QColor("#2d2d2d"))
+        self._rssi_chart.setBackgroundBrush(self.palette().window())
         self._rssi_chart.setPlotAreaBackgroundVisible(False)
+
+        # 自适应主题：从 palette 取 label/grid 颜色
+        txtColor = self.palette().color(self.palette().ColorRole.Text)
+        txtColor.setAlpha(160)
+        gridColor = self.palette().color(self.palette().ColorRole.Mid)
+        gridColor.setAlpha(100)
 
         self._axis_x = QValueAxis()
         self._axis_x.setRange(0, self._rssi_max)
@@ -125,18 +132,18 @@ class SerialPanel(QtWidgets.QGroupBox):
         self._rssi_series.attachAxis(self._axis_x)
 
         self._axis_y = QValueAxis()
-        self._axis_y.setRange(-110, -20)
+        self._axis_y.setRange(-80, -10)
         self._axis_y.setLabelFormat("%d")
-        self._axis_y.setLabelsColor(QColor("#999"))
-        self._axis_y.setGridLineColor(QColor("#444"))
+        self._axis_y.setLabelsColor(txtColor)
+        self._axis_y.setGridLineColor(gridColor)
         self._axis_y.setTickCount(4)
         self._rssi_chart.addAxis(self._axis_y, QtCore.Qt.Alignment.AlignLeft)
         self._rssi_series.attachAxis(self._axis_y)
 
         self._rssi_view = QChartView(self._rssi_chart)
         self._rssi_view.setRenderHint(QPainter.RenderHint.Antialiasing)
-        self._rssi_view.setMinimumHeight(90)
-        self._rssi_view.setMaximumHeight(110)
+        self._rssi_view.setMinimumHeight(140)
+        self._rssi_view.setMaximumHeight(160)
         layout.addWidget(self._rssi_view)
 
         # ── R6：日志框 ──
@@ -269,18 +276,27 @@ class MonitorWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout(central)
         layout.setSpacing(3)
 
-        # 上方：路由表 + 网络统计
+        # 上方：路由表（左半）+ 网络统计 + 停止轮询（右半）
         infoRow = QtWidgets.QHBoxLayout()
         self._routeText = QtWidgets.QTextEdit()
         self._routeText.setReadOnly(True)
         self._routeText.setMaximumHeight(100)
         self._routeText.setPlaceholderText("路由表")
+        infoRow.addWidget(self._routeText, stretch=1)
+
+        rightCol = QtWidgets.QHBoxLayout()
+        rightCol.setSpacing(3)
         self._statsText = QtWidgets.QTextEdit()
         self._statsText.setReadOnly(True)
         self._statsText.setMaximumHeight(100)
         self._statsText.setPlaceholderText("网络统计")
-        infoRow.addWidget(self._routeText)
-        infoRow.addWidget(self._statsText)
+        rightCol.addWidget(self._statsText, stretch=1)
+        self._pollBtn = QtWidgets.QPushButton("停止 RSSI 轮询")
+        self._pollBtn.setFixedHeight(100)
+        self._pollBtn.setFixedWidth(110)
+        self._pollBtn.clicked.connect(self._togglePoll)
+        rightCol.addWidget(self._pollBtn)
+        infoRow.addLayout(rightCol, stretch=1)
         layout.addLayout(infoRow)
 
         # 下部：四个节点面板（等分填满）
@@ -310,6 +326,14 @@ class MonitorWindow(QtWidgets.QMainWindow):
             if p.is_connected():
                 p.send_broadcast_raw("_")
                 break
+
+    def _togglePoll(self):
+        if self._poll_timer.isActive():
+            self._poll_timer.stop()
+            self._pollBtn.setText("开始 RSSI 轮询")
+        else:
+            self._poll_timer.start(3000)
+            self._pollBtn.setText("停止 RSSI 轮询")
 
     def _onPanelLog(self, name, text):
         s = text.strip()
